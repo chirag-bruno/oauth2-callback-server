@@ -105,7 +105,7 @@ const vscodeHtml = `<!doctype html>
         var queryString = allParams.toString();
         var url = 'vscode://bruno-api-client.bruno/oauth2/callback';
         url += queryString ? '?' + queryString : '';
-        window.location.href = url;
+        window.open(url);
       })();
     </script>
   </head>
