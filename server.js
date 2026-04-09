@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const http = require('http');
-const { parseArgs } = require('util');
+const http = require("http");
+const { parseArgs } = require("util");
 
 // Help message
 const showHelp = () => {
@@ -28,16 +28,16 @@ try {
   ({ values } = parseArgs({
     options: {
       port: {
-        type: 'string',
-        short: 'p'
+        type: "string",
+        short: "p",
       },
       help: {
-        type: 'boolean',
-        short: 'h',
-        default: false
-      }
+        type: "boolean",
+        short: "h",
+        default: false,
+      },
     },
-    strict: true
+    strict: true,
   }));
 } catch (err) {
   console.error(`Error: ${err.message}\n`);
@@ -58,12 +58,15 @@ if (values.port) {
   requestedPort = parseInt(values.port, 10);
   // Validate port
   if (isNaN(requestedPort) || requestedPort < 1 || requestedPort > 65535) {
-    console.error('Error: Invalid port number. Port must be between 1 and 65535.');
+    console.error(
+      "Error: Invalid port number. Port must be between 1 and 65535.",
+    );
     process.exit(1);
   }
 }
 
-const htmlContent = `<!doctype html>
+// Bruno desktop: redirects to bruno:// protocol
+const brunoHtml = `<!doctype html>
 <html>
   <head>
     <title>Bruno OAuth2 Redirect</title>
@@ -81,11 +84,41 @@ const htmlContent = `<!doctype html>
   </body>
 </html>`;
 
+// VS Code: redirects to vscode:// protocol
+// Normalizes hash fragments into query params since vscode:// URIs don't support fragments
+const vscodeHtml = `<!doctype html>
+<html>
+  <head>
+    <title>Bruno OAuth2 Redirect</title>
+    <script>
+      (function() {
+        var allParams = new URLSearchParams(window.location.search);
+
+        // Parse hash fragment params (implicit flow: #access_token=...&token_type=...)
+        if (window.location.hash) {
+          var hashParams = new URLSearchParams(window.location.hash.substring(1));
+          hashParams.forEach(function(value, key) {
+            allParams.set(key, value);
+          });
+        }
+
+        var queryString = allParams.toString();
+        var url = 'vscode://bruno-api-client.bruno/oauth2/callback';
+        url += queryString ? '?' + queryString : '';
+        window.location.href = url;
+      })();
+    </script>
+  </head>
+  <body>
+    Redirecting to Bruno (VS Code)...
+  </body>
+</html>`;
+
 // Start server
 async function startServer() {
   try {
     // Dynamically import get-port (ESM module)
-    const getPort = (await import('get-port')).default;
+    const getPort = (await import("get-port")).default;
 
     let PORT;
 
@@ -93,7 +126,9 @@ async function startServer() {
       // User specified a port - try to use it exactly
       PORT = await getPort({ port: requestedPort });
       if (PORT !== requestedPort) {
-        console.error(`Error: Port ${requestedPort} is already in use. Please try a different port.`);
+        console.error(
+          `Error: Port ${requestedPort} is already in use. Please try a different port.`,
+        );
         process.exit(1);
       }
     } else {
@@ -102,24 +137,31 @@ async function startServer() {
     }
 
     const server = http.createServer((req, res) => {
-      if (req.url.startsWith('/callback')) {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(htmlContent);
+      if (req.url.startsWith("/vscode/callback")) {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(vscodeHtml);
+      } else if (req.url.startsWith("/callback")) {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(brunoHtml);
       } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
       }
     });
 
     // Attach error handler
-    server.on('error', (err) => {
-      console.error('Server error:', err);
+    server.on("error", (err) => {
+      console.error("Server error:", err);
       process.exit(1);
     });
 
     // Start listening
-    server.listen(PORT, '127.0.0.1', () => {
-      console.log(`OAuth2 callback server running at http://127.0.0.1:${PORT}/callback`);
+    server.listen(PORT, "127.0.0.1", () => {
+      console.log(
+        `OAuth2 callback server running at http://127.0.0.1:${PORT}\n` +
+        `  Bruno Desktop: http://127.0.0.1:${PORT}/callback\n` +
+        `  VS Code:       http://127.0.0.1:${PORT}/vscode/callback`,
+      );
     });
   } catch (err) {
     console.error(`Error: ${err.message}`);
@@ -128,3 +170,4 @@ async function startServer() {
 }
 
 startServer();
+
